@@ -298,17 +298,14 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ---------- Camera scanner ----------
 const camStatus = document.getElementById('camStatus');
 let scannerRunning = false;
+let html5QrCode = null;
+let lastCamId = null;
 
 function startScanner() {
   try {
-    const html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(cameras => {
-      if (!cameras || cameras.length === 0) {
-        camStatus.textContent = "No camera found. Use the barcode field below instead.";
-        camStatus.classList.add('err');
-        return;
-      }
-      const camId = cameras.find(c => /back|rear|environment/i.test(c.label))?.id || cameras[cameras.length - 1].id;
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+
+    const runWithCamera = (camId) => {
       html5QrCode.start(
         camId,
         { fps: 10, qrbox: { width: 260, height: 140 } },
@@ -329,6 +326,21 @@ function startScanner() {
         camStatus.textContent = "Camera unavailable in this view (" + (err.message || err) + "). Use the barcode field below instead.";
         camStatus.classList.add('err');
       });
+    };
+
+    if (lastCamId) {
+      runWithCamera(lastCamId);
+      return;
+    }
+
+    Html5Qrcode.getCameras().then(cameras => {
+      if (!cameras || cameras.length === 0) {
+        camStatus.textContent = "No camera found. Use the barcode field below instead.";
+        camStatus.classList.add('err');
+        return;
+      }
+      lastCamId = cameras.find(c => /back|rear|environment/i.test(c.label))?.id || cameras[cameras.length - 1].id;
+      runWithCamera(lastCamId);
     }).catch(err => {
       camStatus.textContent = "Camera permission not available here. Use the barcode field below instead.";
       camStatus.classList.add('err');
@@ -338,6 +350,16 @@ function startScanner() {
     camStatus.classList.add('err');
   }
 }
+
+function restartScanner() {
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('manualCode').value = '';
+  if (scannerRunning) return; // already running, nothing to do
+  camStatus.textContent = "Starting camera…";
+  camStatus.classList.remove('err');
+  startScanner();
+}
+
 startScanner();
 
 // ---------- Manual entry ----------
@@ -357,12 +379,14 @@ async function lookup(barcode) {
     const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,image_small_url,nova_group,nutrition_grades,ingredients_text,additives_tags,quantity`);
     const data = await res.json();
     if (data.status !== 1 || !data.product) {
-      resultEl.innerHTML = `<div class="card error">No product found for barcode ${barcode} in Open Food Facts. It may not be in the database yet.</div>`;
+      resultEl.innerHTML = `<div class="card error">No product found for barcode ${barcode} in Open Food Facts. It may not be in the database yet.<div class="save-row"><button class="ghost" id="newScanBtnErr">New scan</button></div></div>`;
+      document.getElementById('newScanBtnErr').addEventListener('click', restartScanner);
       return;
     }
     renderProduct(barcode, data.product);
   } catch (e) {
-    resultEl.innerHTML = `<div class="card error">Lookup failed — check your connection and try again.</div>`;
+    resultEl.innerHTML = `<div class="card error">Lookup failed — check your connection and try again.<div class="save-row"><button class="ghost" id="newScanBtnErr">New scan</button></div></div>`;
+    document.getElementById('newScanBtnErr').addEventListener('click', restartScanner);
   }
 }
 
@@ -396,13 +420,13 @@ function renderProduct(barcode, p) {
       ${additives.length ? `<div class="section-title">Additives (${additives.length})</div><div class="chip-list">${additives.map(a => `<span class="chip">${a}</span>`).join('')}</div>` : ''}
       <div class="save-row">
         <button id="saveBtn">Save to history</button>
-        <button class="ghost" id="clearBtn">Clear</button>
+        <button class="ghost" id="newScanBtn">New scan</button>
       </div>
     </div>
   `;
 
   document.getElementById('saveBtn').addEventListener('click', () => saveScan(barcode, p, nova, grade));
-  document.getElementById('clearBtn').addEventListener('click', () => { resultEl.innerHTML = ''; });
+  document.getElementById('newScanBtn').addEventListener('click', restartScanner);
 }
 
 function gradeColor(grade) {
