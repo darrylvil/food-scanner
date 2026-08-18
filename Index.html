@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Food Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --nova1: #2e7d32;
+    --nova2: #9e9d24;
+    --nova3: #ef6c00;
+    --nova4: #c62828;
+    --ink: #1a1a1a;
+    --paper: #faf9f6;
+    --line: #ddd8cf;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    padding-bottom: 40px;
+  }
+  header {
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 19px;
+    margin: 0 0 2px;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 0;
+    font-size: 12.5px;
+    color: #6b675f;
+  }
+  main {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13.5px;
+    cursor: pointer;
+    color: #555;
+  }
+  .tab.active {
+    background: var(--ink);
+    color: white;
+    border-color: var(--ink);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  #reader {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .cam-status {
+    font-size: 12.5px;
+    color: #6b675f;
+    margin: 8px 0 16px;
+    line-height: 1.5;
+  }
+  .cam-status.err { color: var(--nova4); }
+
+  .manual-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 12px;
+    font-size: 15px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: white;
+  }
+  button {
+    padding: 12px 16px;
+    font-size: 14px;
+    border: none;
+    border-radius: 8px;
+    background: var(--ink);
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; }
+  button.ghost {
+    background: white;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  .card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .card.loading, .card.error { color: #6b675f; font-size: 14px; }
+
+  .prod-head {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .prod-head img {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: white;
+    flex-shrink: 0;
+  }
+  .prod-head h2 {
+    font-size: 16px;
+    margin: 0 0 2px;
+  }
+  .prod-head .brand {
+    font-size: 12.5px;
+    color: #6b675f;
+  }
+
+  .score-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .badge {
+    flex: 1;
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+    color: white;
+  }
+  .badge .n { font-size: 20px; font-weight: 700; line-height: 1; }
+  .badge .l { font-size: 10.5px; margin-top: 3px; opacity: 0.9; }
+  .badge.grey { background: #b3ada0; }
+
+  .section-title {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #948f83;
+    margin: 16px 0 6px;
+  }
+  .body-text {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #333;
+  }
+  .chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    font-size: 12px;
+    background: #f1efe9;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 4px 10px;
+    color: #444;
+  }
+
+  .save-row {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .hist-item {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .hist-item .dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .hist-item .meta { flex: 1; min-width: 0; }
+  .hist-item .name {
+    font-size: 13.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hist-item .sub {
+    font-size: 11.5px;
+    color: #948f83;
+  }
+  .empty {
+    text-align: center;
+    color: #948f83;
+    font-size: 13px;
+    padding: 30px 10px;
+  }
+  .disclaimer {
+    font-size: 11px;
+    color: #948f83;
+    margin-top: 20px;
+    line-height: 1.5;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Food Scanner</h1>
+  <p>Barcode → NOVA processing score, via Open Food Facts</p>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="scan">Scan</div>
+    <div class="tab" data-tab="history">History</div>
+  </div>
+
+  <div class="panel active" id="panel-scan">
+    <div id="reader"></div>
+    <div class="cam-status" id="camStatus">Starting camera…</div>
+
+    <div class="manual-row">
+      <input type="text" id="manualCode" inputmode="numeric" placeholder="Or type barcode number">
+      <button id="manualBtn">Look up</button>
+    </div>
+
+    <div id="result"></div>
+
+    <div class="disclaimer">
+      Data from Open Food Facts, a crowdsourced open database — coverage and accuracy vary by product. NOVA groups are a research classification of processing level, not a medical or safety rating. This tool is for general food-choice information, not dietary or medical advice.
+    </div>
+  </div>
+
+  <div class="panel" id="panel-history">
+    <div id="historyList"><div class="empty">No scans saved yet</div></div>
+  </div>
+</main>
+
+<script>
+const NOVA_INFO = {
+  1: { label: "Unprocessed / minimally processed", color: "var(--nova1)", desc: "Whole or minimally altered foods — e.g. fresh produce, plain meat, grains, milk." },
+  2: { label: "Processed culinary ingredients", color: "var(--nova2)", desc: "Substances extracted from foods, used in cooking — e.g. oils, butter, sugar, salt." },
+  3: { label: "Processed foods", color: "var(--nova3)", desc: "Group 1/2 foods with added salt, sugar or other group 2 substances — e.g. canned vegetables, cheese, bread." },
+  4: { label: "Ultra-processed", color: "var(--nova4)", desc: "Industrial formulations with ingredients not typically used in home cooking — additives, flavourings, emulsifiers etc." }
+};
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'history') renderHistory();
+  });
+});
+
+// ---------- Camera scanner ----------
+const camStatus = document.getElementById('camStatus');
+let scannerRunning = false;
+
+function startScanner() {
+  try {
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(cameras => {
+      if (!cameras || cameras.length === 0) {
+        camStatus.textContent = "No camera found. Use the barcode field below instead.";
+        camStatus.classList.add('err');
+        return;
+      }
+      const camId = cameras.find(c => /back|rear|environment/i.test(c.label))?.id || cameras[cameras.length - 1].id;
+      html5QrCode.start(
+        camId,
+        { fps: 10, qrbox: { width: 260, height: 140 } },
+        (decodedText) => {
+          if (scannerRunning) {
+            scannerRunning = false;
+            html5QrCode.stop().catch(() => {});
+            camStatus.textContent = "Scanned: " + decodedText;
+            lookup(decodedText);
+          }
+        },
+        () => {}
+      ).then(() => {
+        scannerRunning = true;
+        camStatus.textContent = "Point the camera at a barcode";
+        camStatus.classList.remove('err');
+      }).catch(err => {
+        camStatus.textContent = "Camera unavailable in this view (" + (err.message || err) + "). Use the barcode field below instead.";
+        camStatus.classList.add('err');
+      });
+    }).catch(err => {
+      camStatus.textContent = "Camera permission not available here. Use the barcode field below instead.";
+      camStatus.classList.add('err');
+    });
+  } catch (e) {
+    camStatus.textContent = "Camera scanning isn't supported in this view. Use the barcode field below instead.";
+    camStatus.classList.add('err');
+  }
+}
+startScanner();
+
+// ---------- Manual entry ----------
+document.getElementById('manualBtn').addEventListener('click', () => {
+  const code = document.getElementById('manualCode').value.trim();
+  if (code) lookup(code);
+});
+document.getElementById('manualCode').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('manualBtn').click();
+});
+
+// ---------- Lookup ----------
+async function lookup(barcode) {
+  const resultEl = document.getElementById('result');
+  resultEl.innerHTML = `<div class="card loading">Looking up ${barcode}…</div>`;
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,image_small_url,nova_group,nutrition_grades,ingredients_text,additives_tags,quantity`);
+    const data = await res.json();
+    if (data.status !== 1 || !data.product) {
+      resultEl.innerHTML = `<div class="card error">No product found for barcode ${barcode} in Open Food Facts. It may not be in the database yet.</div>`;
+      return;
+    }
+    renderProduct(barcode, data.product);
+  } catch (e) {
+    resultEl.innerHTML = `<div class="card error">Lookup failed — check your connection and try again.</div>`;
+  }
+}
+
+function renderProduct(barcode, p) {
+  const resultEl = document.getElementById('result');
+  const nova = p.nova_group;
+  const novaInfo = NOVA_INFO[nova];
+  const grade = (p.nutrition_grades || '').toUpperCase();
+  const additives = (p.additives_tags || []).map(a => a.replace('en:', '').toUpperCase());
+
+  const novaBadge = novaInfo
+    ? `<div class="badge" style="background:${novaInfo.color}"><div class="n">NOVA ${nova}</div><div class="l">${novaInfo.label}</div></div>`
+    : `<div class="badge grey"><div class="n">—</div><div class="l">NOVA group not available</div></div>`;
+
+  const gradeBadge = grade
+    ? `<div class="badge" style="background:${gradeColor(grade)}"><div class="n">${grade}</div><div class="l">Nutri-Score</div></div>`
+    : '';
+
+  resultEl.innerHTML = `
+    <div class="card" id="currentCard">
+      <div class="prod-head">
+        ${p.image_small_url ? `<img src="${p.image_small_url}">` : ''}
+        <div>
+          <h2>${escapeHtml(p.product_name || 'Unnamed product')}</h2>
+          <div class="brand">${escapeHtml(p.brands || '')}${p.quantity ? ' · ' + escapeHtml(p.quantity) : ''}</div>
+        </div>
+      </div>
+      <div class="score-row">${novaBadge}${gradeBadge}</div>
+      ${novaInfo ? `<div class="body-text" style="margin-top:10px">${novaInfo.desc}</div>` : ''}
+      ${p.ingredients_text ? `<div class="section-title">Ingredients</div><div class="body-text">${escapeHtml(p.ingredients_text)}</div>` : ''}
+      ${additives.length ? `<div class="section-title">Additives (${additives.length})</div><div class="chip-list">${additives.map(a => `<span class="chip">${a}</span>`).join('')}</div>` : ''}
+      <div class="save-row">
+        <button id="saveBtn">Save to history</button>
+        <button class="ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('saveBtn').addEventListener('click', () => saveScan(barcode, p, nova, grade));
+  document.getElementById('clearBtn').addEventListener('click', () => { resultEl.innerHTML = ''; });
+}
+
+function gradeColor(grade) {
+  const map = { A: '#2e7d32', B: '#7cb342', C: '#f9a825', D: '#ef6c00', E: '#c62828' };
+  return map[grade] || '#b3ada0';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ---------- History (persistent storage) ----------
+async function saveScan(barcode, p, nova, grade) {
+  const entry = {
+    barcode,
+    name: p.product_name || 'Unnamed product',
+    brand: p.brands || '',
+    nova: nova || null,
+    grade: grade || null,
+    scannedAt: new Date().toISOString()
+  };
+  try {
+    await window.storage.set('scan:' + barcode + ':' + Date.now(), JSON.stringify(entry), false);
+    const btn = document.getElementById('saveBtn');
+    btn.textContent = 'Saved ✓';
+    btn.disabled = true;
+  } catch (e) {
+    alert('Could not save — storage error.');
+  }
+}
+
+async function renderHistory() {
+  const listEl = document.getElementById('historyList');
+  listEl.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const keys = await window.storage.list('scan:', false);
+    if (!keys || !keys.keys || keys.keys.length === 0) {
+      listEl.innerHTML = '<div class="empty">No scans saved yet</div>';
+      return;
+    }
+    const entries = [];
+    for (const k of keys.keys) {
+      try {
+        const r = await window.storage.get(k, false);
+        if (r && r.value) entries.push(JSON.parse(r.value));
+      } catch (e) {}
+    }
+    entries.sort((a, b) => new Date(b.scannedAt) - new Date(a.scannedAt));
+    if (entries.length === 0) {
+      listEl.innerHTML = '<div class="empty">No scans saved yet</div>';
+      return;
+    }
+    listEl.innerHTML = entries.map(e => {
+      const info = NOVA_INFO[e.nova];
+      const color = info ? info.color : '#b3ada0';
+      const label = e.nova ? 'NOVA ' + e.nova : '—';
+      const date = new Date(e.scannedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      return `<div class="hist-item">
+        <div class="dot" style="background:${color}">${e.nova || '?'}</div>
+        <div class="meta">
+          <div class="name">${escapeHtml(e.name)}</div>
+          <div class="sub">${escapeHtml(e.brand)}${e.brand ? ' · ' : ''}${label} · ${date}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = '<div class="empty">Couldn\'t load history</div>';
+  }
+}
+</script>
+
+</body>
+</html>
