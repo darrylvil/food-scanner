@@ -186,6 +186,29 @@
     color: #444;
   }
 
+  .concern-box {
+    background: #f7f6f2;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .concern-head {
+    font-size: 13.5px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .concern-item {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #333;
+    margin-bottom: 6px;
+  }
+  .concern-item:last-child { margin-bottom: 0; }
+  .concern-src {
+    font-size: 11px;
+    color: #948f83;
+    margin-top: 2px;
+  }
+
   .save-row {
     margin-top: 16px;
     display: flex;
@@ -267,7 +290,7 @@
     <div id="result"></div>
 
     <div class="disclaimer">
-      Data from Open Food Facts, a crowdsourced open database — coverage and accuracy vary by product. NOVA groups are a research classification of processing level, not a medical or safety rating. This tool is for general food-choice information, not dietary or medical advice.
+      Data from Open Food Facts, a crowdsourced open database — coverage and accuracy vary by product. NOVA groups classify processing method, not healthfulness — many NOVA 4 foods (e.g. mycoprotein products) show neutral or positive health markers in trials despite being ultra-processed by definition. The "UPF concern flag" checks for a short list of additives with published mechanistic or trial evidence of a specific effect (mainly gut-microbiome disruption) — it deliberately does NOT count E-numbers generally, since most additives (e.g. E263, E509) are metabolically inert at food-additive doses and an E-number count is a poor proxy for risk. This is a personal heuristic, not a validated safety rating or medical advice.
     </div>
   </div>
 
@@ -283,6 +306,21 @@ const NOVA_INFO = {
   3: { label: "Processed foods", color: "var(--nova3)", desc: "Group 1/2 foods with added salt, sugar or other group 2 substances — e.g. canned vegetables, cheese, bread." },
   4: { label: "Ultra-processed", color: "var(--nova4)", desc: "Industrial formulations with ingredients not typically used in home cooking — additives, flavourings, emulsifiers etc." }
 };
+
+// Curated flag list — NOT a full E-number list. Counting E-numbers is a poor proxy for
+// risk (many, e.g. E263 calcium acetate, E509 calcium chloride, are metabolically inert
+// at food-additive doses). Instead this flags only additives with published mechanistic
+// or RCT evidence of a specific effect, tiered by strength of evidence.
+const FLAGGED_ADDITIVES = {
+  'e407': { name: 'Carrageenan', tier: 'A', note: 'Gut-microbiome disruption / pro-inflammatory effects shown in ex vivo human microbiota models.', src: 'Microbiome journal, 2020 (Chassaing et al.)' },
+  'e433': { name: 'Polysorbate 80', tier: 'A', note: 'Alters gut microbiota composition and promotes low-grade inflammation in mouse and ex vivo human models.', src: 'Nature, 2015; Microbiome, 2020 (Chassaing et al.)' },
+  'e466': { name: 'Carboxymethylcellulose (CMC)', tier: 'A', note: 'Same evidence base as polysorbate 80 — gut barrier disruption and inflammation in animal and ex vivo human models.', src: 'Nature, 2015; Microbiome, 2020 (Chassaing et al.)' },
+  'e954': { name: 'Saccharin', tier: 'B', note: 'One human RCT found it impaired glucose tolerance via microbiome changes; other trials found no effect — evidence is mixed.', src: 'Suez et al., Cell 2022' },
+  'e955': { name: 'Sucralose', tier: 'B', note: 'Same RCT found an effect on glycaemic response, but other trials and a large RCT (SWEET, 2025) found neutral-to-beneficial outcomes — evidence is contested.', src: 'Suez et al., Cell 2022; SWEET trial, Nature Metabolism 2025' },
+  'e951': { name: 'Aspartame', tier: 'B', note: 'Evidence for a microbiome effect is weaker and less consistent than for saccharin/sucralose — largely metabolised before reaching the gut microbiota.', src: 'Ahmad et al., Nutrients 2020' }
+};
+const TIER_LABEL = { A: 'Stronger evidence', B: 'Mixed / contested evidence' };
+const TIER_COLOR = { A: '#c62828', B: '#ef6c00' };
 
 // ---------- Tabs ----------
 document.querySelectorAll('.tab').forEach(tab => {
@@ -376,7 +414,7 @@ async function lookup(barcode) {
   const resultEl = document.getElementById('result');
   resultEl.innerHTML = `<div class="card loading">Looking up ${barcode}…</div>`;
   try {
-    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,image_small_url,nova_group,nutrition_grades,ingredients_text,additives_tags,quantity`);
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,image_small_url,nova_group,nutrition_grades,nutrient_levels,ingredients_text,additives_tags,quantity`);
     const data = await res.json();
     if (data.status !== 1 || !data.product) {
       resultEl.innerHTML = `<div class="card error">No product found for barcode ${barcode} in Open Food Facts. It may not be in the database yet.<div class="save-row"><button class="ghost" id="newScanBtnErr">New scan</button></div></div>`;
@@ -395,7 +433,9 @@ function renderProduct(barcode, p) {
   const nova = p.nova_group;
   const novaInfo = NOVA_INFO[nova];
   const grade = (p.nutrition_grades || '').toUpperCase();
-  const additives = (p.additives_tags || []).map(a => a.replace('en:', '').toUpperCase());
+  const additiveCodes = (p.additives_tags || []).map(a => a.replace('en:', '').toLowerCase());
+  const flagged = additiveCodes.filter(c => FLAGGED_ADDITIVES[c]).map(c => FLAGGED_ADDITIVES[c]);
+  const otherAdditives = additiveCodes.filter(c => !FLAGGED_ADDITIVES[c]).map(c => c.toUpperCase());
 
   const novaBadge = novaInfo
     ? `<div class="badge" style="background:${novaInfo.color}"><div class="n">NOVA ${nova}</div><div class="l">${novaInfo.label}</div></div>`
@@ -404,6 +444,38 @@ function renderProduct(barcode, p) {
   const gradeBadge = grade
     ? `<div class="badge" style="background:${gradeColor(grade)}"><div class="n">${grade}</div><div class="l">Nutri-Score</div></div>`
     : '';
+
+  // UPF concern flag — only meaningful for NOVA 4, and only ever a heuristic
+  let concernHtml = '';
+  if (nova === 4) {
+    if (flagged.length > 0) {
+      const worstTier = flagged.some(f => f.tier === 'A') ? 'A' : 'B';
+      concernHtml = `
+        <div class="section-title">UPF concern flag</div>
+        <div class="concern-box" style="border-left:4px solid ${TIER_COLOR[worstTier]}">
+          <div class="concern-head" style="color:${TIER_COLOR[worstTier]}">Contains flagged additive${flagged.length > 1 ? 's' : ''} — ${TIER_LABEL[worstTier]}</div>
+          ${flagged.map(f => `<div class="concern-item"><strong>${f.name}</strong> — ${f.note}<div class="concern-src">Source: ${f.src}</div></div>`).join('')}
+        </div>`;
+    } else {
+      const nl = p.nutrient_levels || {};
+      const highCount = Object.values(nl).filter(v => v === 'high').length;
+      if (highCount >= 2) {
+        concernHtml = `
+          <div class="section-title">UPF concern flag</div>
+          <div class="concern-box" style="border-left:4px solid ${TIER_COLOR.B}">
+            <div class="concern-head" style="color:${TIER_COLOR.B}">No flagged additives, but high in ${Object.keys(nl).filter(k => nl[k]==='high').join(' & ')}</div>
+            <div class="concern-item">No additives with specific mechanistic evidence detected — the concern here is the nutrient profile itself, not additives.</div>
+          </div>`;
+      } else {
+        concernHtml = `
+          <div class="section-title">UPF concern flag</div>
+          <div class="concern-box" style="border-left:4px solid var(--nova1)">
+            <div class="concern-head" style="color:var(--nova1)">No flagged additives detected</div>
+            <div class="concern-item">This is NOVA 4 by processing method (e.g. isolated ingredients, texturants), but doesn't contain any additive from the flagged list, and nutrient levels aren't predominantly high. Similar to cases like Quorn mince — ultra-processed by definition, without the specific mechanisms the flagged list targets.</div>
+          </div>`;
+      }
+    }
+  }
 
   resultEl.innerHTML = `
     <div class="card" id="currentCard">
@@ -416,8 +488,9 @@ function renderProduct(barcode, p) {
       </div>
       <div class="score-row">${novaBadge}${gradeBadge}</div>
       ${novaInfo ? `<div class="body-text" style="margin-top:10px">${novaInfo.desc}</div>` : ''}
+      ${concernHtml}
       ${p.ingredients_text ? `<div class="section-title">Ingredients</div><div class="body-text">${escapeHtml(p.ingredients_text)}</div>` : ''}
-      ${additives.length ? `<div class="section-title">Additives (${additives.length})</div><div class="chip-list">${additives.map(a => `<span class="chip">${a}</span>`).join('')}</div>` : ''}
+      ${otherAdditives.length ? `<div class="section-title">Other additives (no specific flag — ${otherAdditives.length})</div><div class="chip-list">${otherAdditives.map(a => `<span class="chip">${a}</span>`).join('')}</div>` : ''}
       <div class="save-row">
         <button id="saveBtn">Save to history</button>
         <button class="ghost" id="newScanBtn">New scan</button>
